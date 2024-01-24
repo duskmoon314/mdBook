@@ -6,7 +6,9 @@ window.search = window.search || {};
     // You can use !hasFocus() to prevent keyhandling in your key
     // event handlers while the user is typing their search.
 
-    if (!Mark || !elasticlunr) {
+    const Fzf = window.fzf.Fzf;
+
+    if (!Mark || !elasticlunr || !Fzf) {
         return;
     }
 
@@ -252,12 +254,41 @@ window.search = window.search || {};
         return teaser_split.join('');
     }
 
+    // Thanks to @HillLiu for the fzf implementation
+    // https://github.com/rust-lang/mdBook/issues/2052
+    function fzfLoad(index) {
+        const docs = index.documentStore.docs;
+        const fzf = new Fzf(Object.keys(docs), {
+            selector: (id) => {
+                const doc = docs[id];
+                return `${doc.title} ${doc.breadcrumbs} ${doc.body}`
+            }
+        });
+
+        return {
+            search: (term, _options) => {
+                const entries = fzf.find(term);
+                const res = entries.map((entry) => {
+                    // TODO: use score to rank results
+                    const { item, _score } = entry;
+                    return {
+                        doc: docs[item],
+                        ref: item,
+                    }
+                });
+                return res;
+            }
+        }
+    }
+
     function init(config) {
         results_options = config.results_options;
         search_options = config.search_options;
         searchbar_outer = config.searchbar_outer;
         doc_urls = config.doc_urls;
-        searchindex = elasticlunr.Index.load(config.index);
+        // searchindex = elasticlunr.Index.load(config.index);
+        searchindex = fzfLoad(config.index);
+
 
         // Set up events
         searchicon.addEventListener('click', function(e) { searchIconClickHandler(); }, false);
